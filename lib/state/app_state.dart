@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -43,6 +44,7 @@ class AppState extends ChangeNotifier {
       secrets: this.secrets,
       client: this.httpClient,
       launcher: launcher ?? ((url) => launchUrl(url, mode: LaunchMode.externalApplication)),
+      waitForForeground: _waitForForeground,
     );
     _themeMode = switch (appDb.getSetting('theme_mode')) {
       'light' => ThemeMode.light,
@@ -51,6 +53,24 @@ class AppState extends ChangeNotifier {
     };
     final active = int.tryParse(appDb.getSetting('active_project') ?? '');
     if (active != null && projects.byId(active) != null) _activeProjectId = active;
+  }
+
+  /// Attend le retour de l'application au premier plan (au plus 2 minutes).
+  static Future<void> _waitForForeground() async {
+    final binding = WidgetsBinding.instance;
+    final current = binding.lifecycleState;
+    if (current == null || current == AppLifecycleState.resumed) return;
+    final done = Completer<void>();
+    final listener = AppLifecycleListener(onResume: () {
+      if (!done.isCompleted) done.complete();
+    });
+    try {
+      await done.future.timeout(const Duration(minutes: 2), onTimeout: () {});
+      // Laisse le système rétablir l'accès réseau de l'application.
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    } finally {
+      listener.dispose();
+    }
   }
 
   static Future<AppState> bootstrap() async {

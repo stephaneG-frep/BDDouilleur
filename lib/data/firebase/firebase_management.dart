@@ -140,7 +140,7 @@ class FirebaseManagementService {
     } on GoogleApiException catch (e) {
       if (e.isNotFound) return null;
       // Firebase répond 403 pour un projet existant sans Firebase ou inaccessible.
-      if (e.isPermissionDenied && !e.isServiceDisabled) return null;
+      if (e.isPermissionDenied && !e.isServiceDisabled && !e.isScopeInsufficient) return null;
       rethrow;
     }
   }
@@ -151,7 +151,7 @@ class FirebaseManagementService {
       final r = await api.get('$_rm/v1/projects/$projectId');
       return r['lifecycleState'] as String? ?? 'ACTIVE';
     } on GoogleApiException catch (e) {
-      if (e.isNotFound || (e.isPermissionDenied && !e.isServiceDisabled)) return null;
+      if (e.isNotFound || (e.isPermissionDenied && !e.isServiceDisabled && !e.isScopeInsufficient)) return null;
       rethrow;
     }
   }

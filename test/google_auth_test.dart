@@ -14,7 +14,8 @@ void main() {
   late List<http.Request> requests;
   String? lastChallenge;
 
-  MockClient fakeGoogle({String? tokenError}) => MockClient((req) async {
+  MockClient fakeGoogle({String? tokenError, String scope = 'openid email https://www.googleapis.com/auth/cloud-platform'}) =>
+      MockClient((req) async {
         requests.add(req);
         if (req.url.path == '/token') {
           final body = Uri.splitQueryString(req.body);
@@ -25,7 +26,7 @@ void main() {
               return http.Response(jsonEncode({'error': 'invalid_grant'}), 400);
             }
             return http.Response(
-                jsonEncode({'access_token': 'AT1', 'refresh_token': 'RT1', 'expires_in': 3600}), 200);
+                jsonEncode({'access_token': 'AT1', 'refresh_token': 'RT1', 'expires_in': 3600, 'scope': scope}), 200);
           }
           if (body['grant_type'] == 'refresh_token' && body['refresh_token'] == 'RT1') {
             return http.Response(jsonEncode({'access_token': 'AT2', 'expires_in': 3600}), 200);
@@ -76,9 +77,12 @@ void main() {
     lastChallenge = null;
   });
 
-  Future<GoogleAuthService> service(BrowserLauncher launcher, {String? tokenError}) async {
+  Future<GoogleAuthService> service(BrowserLauncher launcher, {String? tokenError, String? scope}) async {
     final s = GoogleAuthService(
-        secrets: secrets, launcher: launcher, client: fakeGoogle(tokenError: tokenError), endpoints: endpoints);
+        secrets: secrets,
+        launcher: launcher,
+        client: scope == null ? fakeGoogle(tokenError: tokenError) : fakeGoogle(tokenError: tokenError, scope: scope),
+        endpoints: endpoints);
     await s.saveClientConfig(
         const OAuthClientConfig(clientId: '123-abc.apps.googleusercontent.com', clientSecret: 'secret'));
     return s;
@@ -131,5 +135,59 @@ void main() {
   test('sans client configuré : message clair', () async {
     final auth = GoogleAuthService(secrets: secrets, launcher: browser(), client: fakeGoogle(), endpoints: endpoints);
     await expectLater(auth.signIn(), throwsA(isA<GoogleAuthException>()));
+  });
+
+  test('consentement partiel (case Google Cloud non cochée) : refusé, révoqué, rien de stocké', () async {
+    final auth = await service(browser(), scope: 'openid email');
+    await expectLater(auth.signIn(),
+        throwsA(isA<GoogleAuthException>().having((e) => e.message, 'message', contains('cochez TOUTES les cases'))));
+    expect(secrets.values.containsKey(SecretKeys.refreshToken), isFalse);
+    expect(requests.last.url.path, '/revoke');
+  });
+
+  test('réseau coupé au retour du navigateur : attente du premier plan puis nouvelles tentatives', () async {
+    var failures = 2;
+    var waited = false;
+    final inner = fakeGoogle();
+    final flaky = MockClient((req) async {
+      if (req.url.path == '/token' && failures > 0) {
+        failures--;
+        throw const SocketException("Failed host lookup: 'oauth2.googleapis.com'");
+      }
+      final copy = http.Request(req.method, req.url)
+        ..headers.addAll(req.headers)
+        ..body = req.body;
+      return inner.send(copy).then(http.Response.fromStream);
+    });
+    final auth = GoogleAuthService(
+      secrets: secrets,
+      launcher: browser(),
+      client: flaky,
+      endpoints: endpoints,
+      waitForForeground: () async => waited = true,
+      networkRetryDelays: const [Duration.zero, Duration.zero, Duration.zero],
+    );
+    await auth.saveClientConfig(
+        const OAuthClientConfig(clientId: '123-abc.apps.googleusercontent.com', clientSecret: 'secret'));
+    expect(await auth.signIn(), 'testeur@example.com');
+    expect(waited, isTrue);
+    expect(failures, 0);
+  });
+
+  test('réseau définitivement coupé : message clair en français', () async {
+    final auth = GoogleAuthService(
+      secrets: secrets,
+      launcher: browser(),
+      client: MockClient((req) async {
+        if (req.url.path == '/token') throw const SocketException('Failed host lookup');
+        return http.Response('', 404);
+      }),
+      endpoints: endpoints,
+      networkRetryDelays: const [Duration.zero],
+    );
+    await auth.saveClientConfig(
+        const OAuthClientConfig(clientId: '123-abc.apps.googleusercontent.com', clientSecret: 'secret'));
+    await expectLater(
+        auth.signIn(), throwsA(isA<GoogleAuthException>().having((e) => e.message, 'message', contains('Réseau injoignable'))));
   });
 }

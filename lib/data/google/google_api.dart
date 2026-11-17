@@ -28,12 +28,18 @@ class GoogleApiException implements Exception {
   bool get isNotFound => statusCode == 404 || status == 'NOT_FOUND';
   bool get isAlreadyExists => statusCode == 409 || status == 'ALREADY_EXISTS';
   bool get isPermissionDenied => statusCode == 403 || status == 'PERMISSION_DENIED';
+  bool get isScopeInsufficient =>
+      reason == 'ACCESS_TOKEN_SCOPE_INSUFFICIENT' || message.contains('insufficient authentication scopes');
   bool get isServiceDisabled => reason == 'SERVICE_DISABLED';
   bool get isBillingRequired =>
       reason == 'BILLING_DISABLED' || message.toLowerCase().contains('billing');
 
   /// Explication en français destinée à l'utilisateur.
   String get explanation {
+    if (isScopeInsufficient) {
+      return 'Autorisation Google incomplète : l\'accès « Google Cloud » n\'a pas été coché lors de la connexion. '
+          'Déconnectez-vous, reconnectez-vous et cochez TOUTES les cases sur l\'écran de Google.';
+    }
     if (isServiceDisabled) {
       return 'Une API Google nécessaire est désactivée sur ce projet.'
           '${activationUrl == null ? '' : ' Activez-la ici : $activationUrl'}';

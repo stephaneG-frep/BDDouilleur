@@ -166,8 +166,9 @@ void showError(BuildContext context, Object error) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(
-      content: Text(text),
+      content: Text(text, style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
       backgroundColor: Theme.of(context).colorScheme.errorContainer,
+      closeIconColor: Theme.of(context).colorScheme.onErrorContainer,
       showCloseIcon: true,
       duration: const Duration(seconds: 6),
     ));
