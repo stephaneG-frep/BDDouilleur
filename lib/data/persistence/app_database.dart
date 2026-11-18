@@ -12,7 +12,7 @@ class AppDatabase {
   final Database db;
   final String path;
 
-  static const schemaVersion = 2;
+  static const schemaVersion = 3;
 
   static AppDatabase open(String path) {
     if (path != ':memory:') File(path).parent.createSync(recursive: true);
@@ -79,6 +79,41 @@ class AppDatabase {
       try {
         db.execute("ALTER TABLE connections ADD COLUMN config TEXT NOT NULL DEFAULT '{}';");
         db.userVersion = 2;
+        db.execute('COMMIT');
+      } catch (_) {
+        db.execute('ROLLBACK');
+        rethrow;
+      }
+    }
+    if (db.userVersion < 3) {
+      // v3 : conversations de l'agent IA, par projet.
+      db.execute('BEGIN');
+      try {
+        db.execute('''
+          CREATE TABLE ai_conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            model TEXT NOT NULL,
+            folder TEXT,
+            connection_id INTEGER REFERENCES connections(id) ON DELETE SET NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+          CREATE INDEX idx_ai_conversations_project ON ai_conversations(project_id, updated_at);
+          CREATE TABLE ai_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER NOT NULL REFERENCES ai_conversations(id) ON DELETE CASCADE,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            created_at INTEGER NOT NULL
+          );
+          CREATE INDEX idx_ai_messages_conversation ON ai_messages(conversation_id, id);
+        ''');
+        db.userVersion = 3;
         db.execute('COMMIT');
       } catch (_) {
         db.execute('ROLLBACK');

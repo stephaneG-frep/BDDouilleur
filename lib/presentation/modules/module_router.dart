@@ -10,6 +10,11 @@ import '../../domain/modules.dart';
 import '../../state/app_state.dart';
 import '../backup/backup_screen.dart';
 import '../database/database_screen.dart';
+import '../../data/codegen/flutter_codegen.dart';
+import '../../domain/schema_proposal.dart';
+import '../agent/agent_screen.dart';
+import '../codegen/codegen_screen.dart';
+import '../detective/project_analysis_screen.dart';
 import '../fabrique/fabrique_screen.dart';
 import '../firebase/firebase_connection_screen.dart';
 import '../firebase/firebase_hub_screen.dart';
@@ -29,12 +34,52 @@ Future<void> openModule(BuildContext context, ModuleInfo module) async {
         await Navigator.push(context, MaterialPageRoute(builder: (_) => BackupScreen(connection: c)));
       }
     case ModuleId.detective:
-      final c = await pickConnection(context, purpose: 'inspecter');
-      if (c != null && context.mounted) await openConnection(context, c);
+      final choice = await _choose(context, 'Que voulez-vous analyser ?', [
+        (Icons.folder_open_rounded, 'Un dossier de projet', 'Flutter, React, Angular, Vue, Python, Node…'),
+        (Icons.storage_rounded, 'Une base de données', 'Tables, colonnes, clés, index'),
+      ]);
+      if (!context.mounted) return;
+      if (choice == 0) {
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => const ProjectAnalysisScreen()));
+      } else if (choice == 1) {
+        final c = await pickConnection(context, purpose: 'inspecter');
+        if (c != null && context.mounted) await openConnection(context, c);
+      }
     case ModuleId.schematiseur:
-      final c = await pickConnection(context, purpose: 'y concevoir des tables', sqliteOnly: true);
-      if (c != null && context.mounted) {
-        await Navigator.push(context, MaterialPageRoute(builder: (_) => DatabaseScreen(connection: c)));
+      final choice = await _choose(context, 'Comment concevoir le schéma ?', [
+        (Icons.table_chart_rounded, 'Avec le formulaire', 'Créer des tables dans une base SQLite'),
+        (Icons.record_voice_over_rounded, 'Depuis une description en français', 'L\'agent IA propose un schéma'),
+      ]);
+      if (!context.mounted) return;
+      if (choice == 0) {
+        final c = await pickConnection(context, purpose: 'y concevoir des tables', sqliteOnly: true);
+        if (c != null && context.mounted) {
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => DatabaseScreen(connection: c)));
+        }
+      } else if (choice == 1) {
+        await startConversation(context,
+            prompt: 'Je veux une base de données pour : … (décrivez votre application). '
+                'Propose un schéma avec propose_schema et explique chaque relation.');
+      }
+    case ModuleId.connecteur:
+      final c = await pickConnection(context, purpose: 'générer son code Flutter', sqliteOnly: true);
+      if (c == null || !context.mounted) return;
+      try {
+        final state = context.read<AppState>();
+        final db = await state.connectorFor(c);
+        final entities = [for (final t in await db.listTables()) FlutterCodeGenerator.entityFromTable(await db.describeTable(t))];
+        if (!context.mounted) return;
+        if (entities.isEmpty) {
+          showError(context, 'La base « ${c.name} » ne contient aucune table.');
+          return;
+        }
+        await Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => CodegenScreen(
+                    proposal: SchemaProposal(entities: entities, summary: 'Tables de la base « ${c.name} »'))));
+      } catch (e) {
+        if (context.mounted) showError(context, e);
       }
     case ModuleId.reparateur:
       final c = await pickConnection(context, purpose: 'diagnostiquer', sqliteOnly: true);
@@ -44,7 +89,7 @@ Future<void> openModule(BuildContext context, ModuleInfo module) async {
       }
     case ModuleId.firebase:
       await Navigator.push(context, MaterialPageRoute(builder: (_) => const FirebaseHubScreen()));
-    case ModuleId.connecteur || ModuleId.gardien || ModuleId.autopilot:
+    case ModuleId.gardien || ModuleId.autopilot:
       await Navigator.push(context, MaterialPageRoute(builder: (_) => ModuleInfoScreen(module: module)));
   }
 }
@@ -164,3 +209,19 @@ class ModuleInfoScreen extends StatelessWidget {
     );
   }
 }
+
+Future<int?> _choose(BuildContext context, String title, List<(IconData, String, String)> options) =>
+    showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(shrinkWrap: true, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(title, style: Theme.of(ctx).textTheme.titleMedium),
+          ),
+          for (final (i, o) in options.indexed)
+            ListTile(leading: Icon(o.$1), title: Text(o.$2), subtitle: Text(o.$3), onTap: () => Navigator.pop(ctx, i)),
+        ]),
+      ),
+    );

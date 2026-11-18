@@ -30,7 +30,12 @@ enum JournalAction {
   authTested('Parcours Authentication testé'),
   firebaseConfigWritten('Configuration FlutterFire écrite'),
   firebaseDiagnostic('Diagnostic Firebase'),
-  diagnosticFixApplied('Correction appliquée');
+  diagnosticFixApplied('Correction appliquée'),
+  agentToolExecuted('Action de l\'agent IA'),
+  agentConversation('Conversation avec l\'agent IA'),
+  codeGenerated('Code généré et intégré'),
+  codeRestored('Intégration de code annulée'),
+  schemaApplied('Schéma appliqué');
 
   const JournalAction(this.label);
   final String label;

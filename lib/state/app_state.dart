@@ -6,7 +6,11 @@ import 'package:http/http.dart' as http_pkg;
 import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../data/ai/ai_providers.dart';
+import '../data/ai/ai_repository.dart';
+import '../data/ai/ai_settings.dart';
 import '../data/backup/sqlite_backup_service.dart';
+import '../data/codegen/code_integrator.dart';
 import '../data/connectors/database_connector.dart';
 import '../data/connectors/sqlite/sqlite_connector.dart';
 import '../data/firebase/firebase_management.dart';
@@ -19,6 +23,7 @@ import '../data/secrets/secret_store.dart';
 import '../data/persistence/app_database.dart';
 import '../data/persistence/app_paths.dart';
 import '../data/persistence/repositories.dart';
+import '../domain/ai/ai_models.dart';
 import '../domain/firebase/firebase_target.dart';
 import '../domain/models/db_engine.dart';
 import '../domain/models/journal_entry.dart';
@@ -103,6 +108,22 @@ class AppState extends ChangeNotifier {
 
   /// Message si le stockage sécurisé n'est pas accessible.
   String? secretsError;
+
+  // ------------------------------------------------------------------ IA
+  late final AiSettings ai = AiSettings(appDb, secrets);
+  late final AiRepository aiConversations = AiRepository(appDb);
+  CodeIntegrator codeIntegrator = CodeIntegrator();
+
+  /// Fabrique de fournisseurs (remplaçable dans les tests).
+  AiProvider Function(AiProviderConfig config)? providerFactory;
+
+  /// Prévient l'interface d'un changement de réglage.
+  void refresh() => notifyListeners();
+
+  Future<AiProvider> providerFor(AiProviderKind kind) async {
+    final config = await ai.config(kind);
+    return providerFactory?.call(config) ?? createProvider(config, client: httpClient);
+  }
 
   final Map<int, SqliteConnector> _openConnectors = {};
 

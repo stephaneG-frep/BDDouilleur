@@ -1,5 +1,14 @@
 // Captures d'écran rendues par le moteur Flutter, avec les vraies polices.
 // Usage : flutter test tool/screenshots.dart  (sortie : build/screenshots/)
+import 'dart:convert';
+
+import 'package:bddouilleur/data/codegen/code_integrator.dart';
+import 'package:bddouilleur/domain/ai/ai_models.dart';
+import 'package:bddouilleur/domain/schema_proposal.dart';
+import 'package:bddouilleur/presentation/agent/agent_screen.dart';
+import 'package:bddouilleur/presentation/agent/ai_providers_screen.dart';
+import 'package:bddouilleur/presentation/agent/chat_screen.dart';
+import 'package:bddouilleur/presentation/codegen/codegen_screen.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -131,6 +140,56 @@ void main() {
     await shot(tester, '08_regles_generateur');
     await open(const FirebaseHubScreen(), const Size(400, 860));
     await shot(tester, '09_firebase_telephone');
+
+    // --- Phase 3 : agent IA, Détective, Connecteur (données de démonstration, sans réseau).
+    state.ai.setModel(AiProviderKind.anthropic, 'claude-opus-5-5');
+    state.ai.defaultProvider = AiProviderKind.anthropic;
+    final conv = state.aiConversations.create(
+        projectId: project.id!, title: 'Base pour la boutique', provider: AiProviderKind.anthropic, model: 'claude-opus-5-5');
+    const demo = SchemaProposal(summary: 'Une boutique : catégories, produits et commandes.', entities: [
+      EntityProposal(name: 'Category', fields: [FieldProposal(name: 'label', type: SqlColumnType.text, required: true)]),
+      EntityProposal(name: 'Product', fields: [
+        FieldProposal(name: 'name', type: SqlColumnType.text, required: true),
+        FieldProposal(name: 'price', type: SqlColumnType.real, required: true),
+        FieldProposal(name: 'categoryId', type: SqlColumnType.integer, references: 'Category', required: true),
+      ]),
+    ]);
+    for (final m in [
+      AiMessage.user('Crée-moi une base pour gérer les produits de ma boutique'),
+      const AiMessage(role: AiRole.assistant, text: 'Je regarde d\'abord ce que contient la base Catalogue.', toolCalls: [
+        AiToolCall(id: '1', name: 'describe_database', arguments: {'connection_id': 1}),
+      ]),
+      const AiMessage(role: AiRole.tool, toolResults: [
+        AiToolResult(callId: '1', name: 'describe_database', content: '{"engine":"sqlite","tables":[{"table":"produits","rows":3}]}'),
+      ]),
+      AiMessage(role: AiRole.assistant, text: 'Voici une architecture plus complète, avec des catégories.', toolCalls: [
+        AiToolCall(id: '2', name: 'propose_schema', arguments: demo.toJson()),
+      ]),
+      AiMessage(role: AiRole.tool, toolResults: [
+        AiToolResult(callId: '2', name: 'propose_schema', content: jsonEncode({'affiche': true, 'proposal': demo.toJson()})),
+      ]),
+      const AiMessage(role: AiRole.assistant, text: 'Vous pouvez créer ces tables dans « Catalogue » ou générer le code Flutter.'),
+    ]) {
+      state.aiConversations.addMessage(conv.id, m);
+    }
+    await open(const AgentScreen(), const Size(1280, 860));
+    await shot(tester, '10_agent_conversations');
+    await open(ChatScreen(conversationId: conv.id), const Size(1280, 1400));
+    await shot(tester, '11_agent_conversation');
+    await open(const AiProvidersScreen(), const Size(1280, 900));
+    await shot(tester, '12_fournisseurs_ia');
+    final flutterDir = Directory('${tmp.path}/appli')..createSync();
+    File('${flutterDir.path}/pubspec.yaml').writeAsStringSync('name: boutique\ndependencies:\n  flutter:\n    sdk: flutter\n');
+    Directory('${flutterDir.path}/lib/models').createSync(recursive: true);
+    // Outils Flutter simulés : Process.run ne s'exécute pas sous l'horloge de test.
+    state.codeIntegrator = CodeIntegrator(runner: (exe, args, dir) async => CommandResult('$exe ${args.join(' ')}', 0, 'ok'));
+    await open(CodegenScreen(proposal: demo, initialFolder: flutterDir.path), const Size(1280, 1500));
+    await tester.tap(find.text('Calculer le plan'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 500)));
+    await tester.pumpAndSettle();
+    await shot(tester, '13_connecteur_plan');
+    await open(ChatScreen(conversationId: conv.id), const Size(400, 860));
+    await shot(tester, '14_agent_telephone');
 
     tester.platformDispatcher.clearAccessibilityFeaturesTestValue();
     tester.view.reset();
