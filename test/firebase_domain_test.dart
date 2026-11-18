@@ -211,7 +211,7 @@ service cloud.firestore {
     });
   });
 
-  test('migration de la base interne v1 → v3 sans perte', () {
+  test('migration de la base interne v1 → v4 sans perte', () {
     final dir = Directory.systemTemp.createTempSync('bdd_mig_');
     final path = p.join(dir.path, 'app.db');
     // Base au format v1 (phase 1).
@@ -227,7 +227,8 @@ service cloud.firestore {
     ''');
     v1.close();
     final app = AppDatabase.open(path);
-    expect(app.db.userVersion, 3);
+    expect(app.db.userVersion, 4);
+    expect(app.db.select("SELECT name FROM sqlite_master WHERE name = 'autopilot_runs'"), hasLength(1));
     expect(app.db.select("SELECT name FROM sqlite_master WHERE name = 'ai_conversations'"), hasLength(1));
     final row = app.db.select('SELECT name, config FROM connections').single;
     expect(row['name'], 'base');

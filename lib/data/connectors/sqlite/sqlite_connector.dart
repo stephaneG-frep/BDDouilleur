@@ -276,6 +276,20 @@ class SqliteConnector implements DatabaseConnector {
 
   static int _totalChanges(Database db) => db.select('SELECT total_changes() AS t').first['t'] as int;
 
+  /// Lecture brute (diagnostics) : lignes sous forme de dictionnaires.
+  Future<List<Map<String, Object?>>> select(String sql, [List<Object?> args = const []]) async =>
+      _guard(() => [for (final r in _conn.select(sql, args)) Map<String, Object?>.of(r)]);
+
+  /// Vrai si l'instruction se compile (sans l'exécuter) ; sinon le message d'erreur.
+  Future<String?> compileError(String sql) async {
+    try {
+      _conn.prepare(sql).close();
+      return null;
+    } catch (e) {
+      return '$e';
+    }
+  }
+
   @override
   Future<IntegrityReport> checkIntegrity() async => _guard(() {
         final messages = _conn.select('PRAGMA integrity_check').map((r) => r.values.first.toString()).toList();

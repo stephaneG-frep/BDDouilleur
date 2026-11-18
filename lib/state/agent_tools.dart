@@ -5,6 +5,8 @@ import 'package:path/path.dart' as p;
 import '../data/ai/agent.dart';
 import '../data/analysis/project_analyzer.dart';
 import '../data/codegen/flutter_codegen.dart';
+import '../data/repair/sqlite_doctor.dart';
+import '../domain/autopilot/autonomy.dart';
 import '../data/connectors/sqlite/sqlite_sql_builder.dart';
 import '../domain/ai/ai_models.dart';
 import '../domain/firebase/firestore_rules.dart';
@@ -17,13 +19,26 @@ import 'app_state.dart';
 
 /// Contexte de travail de l'agent : projet, base par défaut, dossier autorisé.
 class AgentContext {
-  const AgentContext({required this.state, required this.project, this.folder, this.connectionId});
+  const AgentContext({
+    required this.state,
+    required this.project,
+    this.folder,
+    this.connectionId,
+    this.mode = AutonomyMode.manual,
+    this.scopeConnectionIds,
+  });
   final AppState state;
   final Project project;
 
   /// Seul dossier que l'agent peut lire (choisi par l'utilisateur).
   final String? folder;
   final int? connectionId;
+  final AutonomyMode mode;
+
+  /// Bases du périmètre approuvé (par défaut : la base de la conversation).
+  final Set<int>? scopeConnectionIds;
+
+  Set<int> get scope => scopeConnectionIds ?? {?connectionId};
 }
 
 /// Outils réels de l'agent. Aucun outil n'exécute de commande système :
@@ -33,6 +48,34 @@ class AgentToolbox {
   final AgentContext ctx;
 
   AppState get _state => ctx.state;
+
+  int? _connIdOf(Map<String, Object?> a) => (a['connection_id'] as num?)?.toInt() ?? ctx.connectionId;
+
+  /// L'appel vise-t-il une base du périmètre approuvé ?
+  bool inScope(AgentTool tool, Map<String, Object?> args) {
+    final id = tool.connectionOf?.call(args);
+    return id == null || ctx.scope.contains(id);
+  }
+
+  /// Politique d'autonomie appliquée à chaque appel d'outil.
+  bool needsConfirmation(AiToolCall call, AgentTool tool) =>
+      tool.mutating && ActionPolicy.requiresConfirmation(ctx.mode, tool.risk(call.arguments), inScope: inScope(tool, call.arguments));
+
+  List<String> _checkConn(Map<String, Object?> a, {DbEngine? engine}) {
+    try {
+      final c = _conn(a);
+      if (engine != null && c.engine != engine) return ['La base #${c.id} n\'est pas ${engine.label}.'];
+      return const [];
+    } catch (e) {
+      return ['$e'];
+    }
+  }
+
+  static ActionRisk sqlRisk(String sql) {
+    if (SqlSafety.isDestructive(sql)) return ActionRisk.destructive;
+    if (RegExp(r'\b(CREATE|ANALYZE)\b', caseSensitive: false).hasMatch(sql)) return ActionRisk.schema;
+    return ActionRisk.routine;
+  }
 
   static const _maxFileBytes = 100 * 1024;
 
@@ -319,6 +362,15 @@ Contexte :
         ),
         AgentTool(
           mutating: true,
+          riskOf: (_) => ActionRisk.schema,
+          connectionOf: _connIdOf,
+          validate: (a) => [
+            ..._checkConn(a, engine: DbEngine.sqlite),
+            if (a['proposal'] is! Map)
+              'Argument « proposal » manquant : {"entities": [{"name": "Client", "fields": [{"name": "nom", "type": "text"}]}]}.'
+            else
+              ...SchemaProposal.fromJson((a['proposal'] as Map).cast()).validate(),
+          ],
           spec: AiToolSpec(
             name: 'create_tables',
             description: 'Crée dans une base SQLite les tables d\'un schéma (clé « id » automatique, clés étrangères). Demande l\'accord de l\'utilisateur.',
@@ -338,6 +390,13 @@ Contexte :
         ),
         AgentTool(
           mutating: true,
+          riskOf: (_) => ActionRisk.routine,
+          connectionOf: _connIdOf,
+          validate: (a) => [
+            ..._checkConn(a, engine: DbEngine.sqlite),
+            if ('${a['table'] ?? ''}'.isEmpty) 'Table manquante.',
+            if (a['values'] is! Map || (a['values'] as Map).isEmpty) 'Valeurs manquantes.',
+          ],
           spec: AiToolSpec(
             name: 'insert_row',
             description: 'Ajoute un enregistrement dans une table SQLite. Demande l\'accord de l\'utilisateur.',
@@ -362,6 +421,12 @@ Contexte :
         ),
         AgentTool(
           mutating: true,
+          riskOf: (a) => sqlRisk('${a['sql'] ?? ''}'),
+          connectionOf: _connIdOf,
+          validate: (a) => [
+            ..._checkConn(a, engine: DbEngine.sqlite),
+            if (SqlScript.split('${a['sql'] ?? ''}').where((x) => !SqlScript.isBlank(x)).isEmpty) 'SQL vide.',
+          ],
           spec: AiToolSpec(
             name: 'execute_sql',
             description: 'Exécute du SQL qui modifie une base SQLite. Un point de restauration est créé avant toute instruction destructive. Demande l\'accord de l\'utilisateur.',
@@ -396,6 +461,18 @@ Contexte :
         ),
         AgentTool(
           mutating: true,
+          // Écrire dans un vrai projet Google touche des données de production.
+          riskOf: (a) {
+            final id = _connIdOf(a);
+            final c = id == null ? null : _state.connections.byId(id);
+            return c != null && c.engine == DbEngine.firestore && !c.firebase.isEmulator ? ActionRisk.sensitive : ActionRisk.routine;
+          },
+          connectionOf: _connIdOf,
+          validate: (a) => [
+            ..._checkConn(a, engine: DbEngine.firestore),
+            if ('${a['collection'] ?? ''}'.isEmpty) 'Collection manquante.',
+            if (a['data'] is! Map) 'Données manquantes.',
+          ],
           spec: AiToolSpec(
             name: 'write_firestore_document',
             description: 'Crée un document Firestore (types spéciaux : {"\$timestamp": "ISO"}, {"\$ref": "col/id"}, {"\$geo": [lat, lng]}). Demande l\'accord de l\'utilisateur.',
@@ -422,7 +499,112 @@ Contexte :
             return {'ok': true, 'path': doc.path};
           },
         ),
+        AgentTool(
+          spec: AiToolSpec(
+            name: 'diagnose_database',
+            description: 'Le Réparateur : diagnostic complet d\'une base SQLite (intégrité, contraintes violées, références '
+                'cassées, index manquants, vues invalides, fragmentation, statistiques, requêtes récentes lentes). '
+                'Chaque constat propose une correction typée avec son niveau de risque.',
+            parameters: _obj({'connection_id': _connId}),
+          ),
+          describe: (a) => 'Diagnostiquer la base #${_connIdOf(a)}',
+          run: (a) async {
+            final c = _conn(a);
+            if (c.engine != DbEngine.sqlite) throw StateError('diagnose_database s\'applique aux bases SQLite.');
+            return [for (final f in await (await doctorFor(_state, c)).run()) f.toJson()];
+          },
+        ),
+        AgentTool(
+          spec: AiToolSpec(
+            name: 'explain_query',
+            description: 'Analyse le plan d\'exécution d\'une requête SQLite (EXPLAIN QUERY PLAN) et propose les index utiles.',
+            parameters: _obj({'connection_id': _connId, 'sql': {'type': 'string'}}, required: ['sql']),
+          ),
+          describe: (a) => 'Expliquer : ${a['sql']}',
+          run: (a) async {
+            final c = _conn(a);
+            if (c.engine != DbEngine.sqlite) throw StateError('explain_query s\'applique aux bases SQLite.');
+            final db = await _state.connectorFor(c);
+            final plan = await db.select('EXPLAIN QUERY PLAN ${'${a['sql']}'.trim().replaceAll(RegExp(r';\s*\$'), '')}');
+            final findings = await SqliteDoctor(db, connectionId: c.id!).analyzeQuery('${a['sql']}');
+            return {'plan': [for (final r in plan) r['detail']], 'constats': [for (final f in findings) f.toJson()]};
+          },
+        ),
+        AgentTool(
+          mutating: true,
+          riskOf: (_) => ActionRisk.schema,
+          connectionOf: _connIdOf,
+          validate: (a) => [
+            ..._checkConn(a, engine: DbEngine.sqlite),
+            if ('${a['table'] ?? ''}'.isEmpty) 'Table manquante.',
+            if (a['columns'] is! List || (a['columns'] as List).isEmpty) 'Colonnes manquantes.',
+          ],
+          spec: AiToolSpec(
+            name: 'create_index',
+            description: 'Crée un index sur une ou plusieurs colonnes d\'une table SQLite (aucune donnée modifiée).',
+            parameters: _obj({
+              'connection_id': _connId,
+              'table': {'type': 'string'},
+              'columns': {'type': 'array', 'items': {'type': 'string'}},
+              'name': {'type': 'string', 'description': 'Facultatif.'},
+              'unique': {'type': 'boolean'},
+            }, required: ['table', 'columns']),
+          ),
+          describe: (a) => 'Créer un index${a['unique'] == true ? ' unique' : ''} sur « ${a['table']} » (${(a['columns'] as List?)?.join(', ')})',
+          run: (a) async {
+            final c = _conn(a);
+            final table = '${a['table']}';
+            final cols = [for (final x in (a['columns'] as List? ?? const [])) '$x'];
+            final name = (a['name'] as String?)?.trim().isNotEmpty == true
+                ? a['name'] as String
+                : 'idx_${table}_${cols.join('_')}'.replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
+            final sql = 'CREATE ${a['unique'] == true ? 'UNIQUE ' : ''}INDEX IF NOT EXISTS ${SqliteSqlBuilder.quote(name)} '
+                'ON ${SqliteSqlBuilder.quote(table)} (${cols.map(SqliteSqlBuilder.quote).join(', ')});';
+            await _state.runLogged(
+              connection: c,
+              action: JournalAction.sqlExecuted,
+              summary: 'Index « $name » créé sur « $table »',
+              run: (db) => db.executeSql(sql),
+              sqlOf: (_) => sql,
+            );
+            return {'ok': true, 'index': name, 'sql': sql};
+          },
+        ),
+        AgentTool(
+          mutating: true,
+          riskOf: (_) => ActionRisk.schema,
+          connectionOf: _connIdOf,
+          validate: (a) => _checkConn(a, engine: DbEngine.sqlite),
+          spec: AiToolSpec(
+            name: 'analyze_statistics',
+            description: 'Calcule les statistiques de l\'optimiseur SQLite (ANALYZE). Aucune donnée modifiée.',
+            parameters: _obj({'connection_id': _connId}),
+          ),
+          describe: (a) => 'Calculer les statistiques de la base #${_connIdOf(a)}',
+          run: (a) async {
+            final c = _conn(a);
+            await _state.runLogged(
+              connection: c,
+              action: JournalAction.sqlExecuted,
+              summary: 'Statistiques de l\'optimiseur calculées (ANALYZE)',
+              run: (db) => db.executeSql('ANALYZE;'),
+              sqlOf: (_) => 'ANALYZE;',
+            );
+            return {'ok': true};
+          },
+        ),
       ];
+
+  /// Réparateur configuré avec les requêtes récentes du journal.
+  static Future<SqliteDoctor> doctorFor(AppState state, DbConnection c) async {
+    final recent = state.journal
+        .recent(connectionId: c.id, limit: 100, withSqlOnly: true)
+        .map((e) => e.sql!)
+        .where((q) => RegExp(r'^\s*(SELECT|WITH)\b', caseSensitive: false).hasMatch(q))
+        .take(20)
+        .toList();
+    return SqliteDoctor(await state.connectorFor(c), connectionId: c.id!, recentQueries: recent);
+  }
 
   /// Crée des tables (dans l'ordre) en journalisant chaque création.
   static Future<Map<String, Object?>> applyTables(AppState state, DbConnection c, List<TableDefinition> tables) async {
@@ -462,6 +644,10 @@ Contexte :
         'insert_row' => 'Ajout d\'enregistrement',
         'execute_sql' => 'Exécution SQL',
         'write_firestore_document' => 'Écriture Firestore',
+        'diagnose_database' => 'Diagnostic de la base',
+        'explain_query' => 'Plan d\'exécution',
+        'create_index' => 'Création d\'index',
+        'analyze_statistics' => 'Statistiques (ANALYZE)',
         _ => c.name,
       };
 }

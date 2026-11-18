@@ -12,7 +12,7 @@ class AppDatabase {
   final Database db;
   final String path;
 
-  static const schemaVersion = 3;
+  static const schemaVersion = 4;
 
   static AppDatabase open(String path) {
     if (path != ':memory:') File(path).parent.createSync(recursive: true);
@@ -114,6 +114,36 @@ class AppDatabase {
           CREATE INDEX idx_ai_messages_conversation ON ai_messages(conversation_id, id);
         ''');
         db.userVersion = 3;
+        db.execute('COMMIT');
+      } catch (_) {
+        db.execute('ROLLBACK');
+        rethrow;
+      }
+    }
+    if (db.userVersion < 4) {
+      // v4 : mode d'autonomie par conversation, exécutions AutoPilot.
+      db.execute('BEGIN');
+      try {
+        db.execute('''
+          ALTER TABLE ai_conversations ADD COLUMN mode TEXT NOT NULL DEFAULT 'manual';
+          CREATE TABLE autopilot_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            goal TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            model TEXT NOT NULL,
+            scope TEXT NOT NULL DEFAULT '[]',
+            plan TEXT NOT NULL,
+            status TEXT NOT NULL,
+            checks TEXT NOT NULL DEFAULT '[]',
+            rollback TEXT NOT NULL DEFAULT '{}',
+            report TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+          CREATE INDEX idx_autopilot_runs_project ON autopilot_runs(project_id, updated_at);
+        ''');
+        db.userVersion = 4;
         db.execute('COMMIT');
       } catch (_) {
         db.execute('ROLLBACK');

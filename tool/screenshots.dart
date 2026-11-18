@@ -4,6 +4,11 @@ import 'dart:convert';
 
 import 'package:bddouilleur/data/codegen/code_integrator.dart';
 import 'package:bddouilleur/domain/ai/ai_models.dart';
+import 'package:bddouilleur/domain/autopilot/autonomy.dart';
+import 'package:bddouilleur/domain/autopilot/autopilot_plan.dart';
+import 'package:bddouilleur/presentation/autopilot/autopilot_screen.dart';
+import 'package:bddouilleur/presentation/repair/repair_screen.dart';
+import 'package:bddouilleur/state/autopilot_engine.dart';
 import 'package:bddouilleur/domain/schema_proposal.dart';
 import 'package:bddouilleur/presentation/agent/agent_screen.dart';
 import 'package:bddouilleur/presentation/agent/ai_providers_screen.dart';
@@ -190,6 +195,32 @@ void main() {
     await shot(tester, '13_connecteur_plan');
     await open(ChatScreen(conversationId: conv.id), const Size(400, 860));
     await shot(tester, '14_agent_telephone');
+
+    // --- Phase 4 : AutoPilot (exécution de démonstration), Réparateur.
+    final apPlan = AutopilotPlan(goal: 'Ajouter des catégories aux produits et indexer la recherche', summary: 'Créer la table categories, '
+        'ajouter un index sur produits.libelle, puis vérifier la base.', steps: [
+      PlanStep(title: 'Créer la table categories', tool: 'create_tables', args: {'connection_id': conn.id}, risk: ActionRisk.schema,
+          status: StepStatus.succeeded, verified: 'Tables présentes : categories', autoApproved: true),
+      PlanStep(title: 'Index sur produits.libelle', tool: 'create_index', args: {'connection_id': conn.id, 'table': 'produits', 'columns': ['libelle']},
+          risk: ActionRisk.schema, status: StepStatus.succeeded, verified: 'Index « idx_produits_libelle » présent.', autoApproved: true),
+      PlanStep(title: 'Supprimer les produits de test', tool: 'execute_sql', args: {'connection_id': conn.id, 'sql': "DELETE FROM produits WHERE libelle LIKE 'test%'"},
+          risk: ActionRisk.destructive, needsConfirmation: true, status: StepStatus.succeeded, verified: 'SQL exécuté : 0 ligne(s) modifiée(s).'),
+      PlanStep(title: 'Diagnostic final', tool: 'diagnose_database', args: {'connection_id': conn.id}, status: StepStatus.succeeded, verified: 'Lecture effectuée.'),
+    ]);
+    final apRun = state.autopilotRuns.create(projectId: project.id!, provider: AiProviderKind.anthropic, model: 'claude-opus-5-5', scope: [conn.id!], plan: apPlan)
+      ..status = RunStatus.succeeded
+      ..checks = [const RunCheck('Prérequis', true, 'Bases accessibles, plan valide.'), const RunCheck('Points de restauration', true, '1 sauvegarde vérifiée créée.'), const RunCheck('Intégrité et clés étrangères de « Catalogue »', true)]
+      ..rollback = RollbackInfo(sqliteBackups: {conn.id!: '/tmp/x.db'});
+    apRun.report = AutopilotEngine.buildReport(apRun, const Duration(seconds: 14));
+    state.autopilotRuns.save(apRun);
+    await open(AutopilotRunScreen(runId: apRun.id), const Size(1280, 1700));
+    await shot(tester, '15_autopilot_rapport');
+    await tester.runAsync(() async => (await state.connectorFor(conn)).executeSql(
+        'CREATE TABLE commandes(id INTEGER PRIMARY KEY, produit_id INTEGER REFERENCES produits(id), quantite INTEGER);'));
+    await open(RepairScreen(connection: conn), const Size(1280, 1300));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await tester.pumpAndSettle();
+    await shot(tester, '16_reparateur');
 
     tester.platformDispatcher.clearAccessibilityFeaturesTestValue();
     tester.view.reset();

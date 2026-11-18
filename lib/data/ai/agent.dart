@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../domain/ai/ai_models.dart';
+import '../../domain/autopilot/autonomy.dart';
 import 'ai_providers.dart';
 
 /// Outil réel mis à disposition de l'agent.
@@ -10,6 +11,9 @@ class AgentTool {
     required this.run,
     this.mutating = false,
     required this.describe,
+    this.riskOf,
+    this.validate,
+    this.connectionOf,
   });
 
   final AiToolSpec spec;
@@ -23,6 +27,17 @@ class AgentTool {
 
   /// Description en français de ce que l'appel va faire (carte d'approbation).
   final String Function(Map<String, Object?> args) describe;
+
+  /// Niveau de risque d'un appel précis (dépend des arguments).
+  final ActionRisk Function(Map<String, Object?> args)? riskOf;
+
+  /// Vérification des arguments SANS rien exécuter (plans AutoPilot).
+  final List<String> Function(Map<String, Object?> args)? validate;
+
+  /// Base visée par l'appel (pour le contrôle du périmètre).
+  final int? Function(Map<String, Object?> args)? connectionOf;
+
+  ActionRisk risk(Map<String, Object?> args) => riskOf?.call(args) ?? (mutating ? ActionRisk.schema : ActionRisk.read);
 
   String get name => spec.name;
 }
@@ -38,7 +53,18 @@ typedef AgentProgress = void Function(AiMessage message);
 /// résultats réels. Une réponse textuelle n'est jamais considérée comme une
 /// opération réussie : seuls les résultats d'outils font foi.
 class Agent {
-  Agent({required this.provider, required this.model, required this.tools, required this.system, this.maxSteps = 12});
+  Agent({
+    required this.provider,
+    required this.model,
+    required this.tools,
+    required this.system,
+    this.maxSteps = 12,
+    this.needsConfirmation,
+  });
+
+  /// Politique d'autonomie : l'appel doit-il être confirmé ? Par défaut,
+  /// toute action modifiante l'est (mode Manuel).
+  final bool Function(AiToolCall call, AgentTool tool)? needsConfirmation;
 
   final AiProvider provider;
   final String model;
@@ -115,7 +141,8 @@ class Agent {
     if (cancelled?.call() == true) {
       return AiToolResult(callId: call.id, name: call.name, isError: true, content: 'Interrompu par l\'utilisateur.');
     }
-    if (t.mutating && !await approve(call, t)) {
+    final confirm = needsConfirmation?.call(call, t) ?? t.mutating;
+    if (confirm && !await approve(call, t)) {
       return AiToolResult(
         callId: call.id,
         name: call.name,
@@ -125,7 +152,11 @@ class Agent {
     }
     try {
       final out = await t.run(call.arguments);
-      return AiToolResult(callId: call.id, name: call.name, content: out is String ? out : jsonEncode(out));
+      return AiToolResult(
+          callId: call.id,
+          name: call.name,
+          content: out is String ? out : jsonEncode(out),
+          autoApproved: t.mutating && !confirm);
     } catch (e) {
       return AiToolResult(callId: call.id, name: call.name, isError: true, content: 'ÉCHEC : $e');
     }

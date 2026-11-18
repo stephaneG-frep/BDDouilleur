@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../domain/ai/ai_models.dart';
+import '../../domain/autopilot/autonomy.dart';
 import '../persistence/app_database.dart';
 
 class AiConversation {
@@ -13,6 +14,7 @@ class AiConversation {
     this.folder,
     this.connectionId,
     required this.updatedAt,
+    this.mode = AutonomyMode.manual,
   });
 
   final int id;
@@ -27,6 +29,7 @@ class AiConversation {
   /// Base de données sur laquelle l'agent travaille par défaut.
   final int? connectionId;
   final DateTime updatedAt;
+  final AutonomyMode mode;
 
   factory AiConversation.fromRow(Map<String, Object?> r) => AiConversation(
         id: r['id'] as int,
@@ -37,6 +40,7 @@ class AiConversation {
         folder: r['folder'] as String?,
         connectionId: r['connection_id'] as int?,
         updatedAt: DateTime.fromMillisecondsSinceEpoch(r['updated_at'] as int),
+        mode: AutonomyMode.fromName(r['mode'] as String?),
       );
 }
 
@@ -81,6 +85,8 @@ class AiRepository {
       [provider.name, model, DateTime.now().millisecondsSinceEpoch, id]);
 
   void delete(int id) => _app.db.execute('DELETE FROM ai_conversations WHERE id = ?', [id]);
+
+  void setMode(int id, AutonomyMode mode) => _app.db.execute('UPDATE ai_conversations SET mode = ? WHERE id = ?', [mode.name, id]);
 
   List<AiMessage> messages(int conversationId) => _app.db
       .select('SELECT content FROM ai_messages WHERE conversation_id = ? ORDER BY id', [conversationId])

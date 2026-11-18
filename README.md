@@ -4,7 +4,7 @@
 
 BDDouilleur est une application Flutter (Linux et Android) qui crée, gère, sauvegarde et explique des bases de données. À terme, ce sera un agent IA capable de s'occuper de toute la partie base de données d'un projet. La spécification complète se trouve dans [SPEC.md](SPEC.md).
 
-**Version actuelle : 0.3.0, phase 3 (agent IA).**
+**Version actuelle : 0.4.0, phase 4 (AutoPilot).**
 
 ## Ce qui fonctionne aujourd'hui
 
@@ -27,7 +27,10 @@ BDDouilleur est une application Flutter (Linux et Android) qui crée, gère, sau
 | Agent IA : Claude, OpenAI, Gemini, Mistral, Ollama ; 14 outils réels ; accord avant toute modification ; historique par projet | ✅ (à valider avec votre clé ou Ollama) |
 | Le Détective : analyse de projets Flutter, React, Angular, Vue, Node, Python et proposition de schéma | ✅ |
 | Le Connecteur : code Flutter (modèles, dépôts sqflite ou Firestore, services, tests), plan, différences, restauration, vérification | ✅ vérifié dans de vrais projets |
-| AutoPilot, PostgreSQL, pilotage Android/Linux, Firebase Storage | Prévus, phases 4 à 6 |
+| Modes Manuel / Assisté / AutoPilot ; AutoPilot : plan d'actions typées, exécution contrôlée, corrections, tests, rapport, retour arrière | ✅ |
+| Le Réparateur : intégrité, contraintes, migrations, index, requêtes lentes, configuration ; corrections avec risque | ✅ |
+| Le Gardien : identifiants exposés, injections SQL, chiffrement, permissions, règles Firestore, RLS Supabase, environnements | ✅ |
+| PostgreSQL et connecteurs avancés, pilotage Android/Linux, Firebase Storage | Prévus, phases 5 et 6 |
 
 Les modules qui ne sont pas encore disponibles affichent une fiche qui le dit clairement. Aucun bouton ne fait semblant de fonctionner.
 
@@ -99,7 +102,7 @@ L'agent n'agit que par des outils typés et journalisés, et chaque modification
 
 Contenu de ce dossier :
 
-- `bddouilleur_app.db` : projets, connexions, conversations de l'agent, journal et réglages. Aucun secret n'y est stocké :
+- `bddouilleur_app.db` : projets, connexions, conversations de l'agent, exécutions AutoPilot, journal et réglages. Aucun secret n'y est stocké :
   les jetons et identifiants OAuth sont dans le trousseau du système (GNOME Keyring, Android Keystore).
 - `databases/projet_<id>/*.db` : les bases créées par La Fabrique.
 - `backups/connexion_<id>/*.db` : les sauvegardes du Coffre-fort.
@@ -110,4 +113,5 @@ Contenu de ce dossier :
 - [docs/BILAN_PHASE_1.md](docs/BILAN_PHASE_1.md) : bilan de la phase 1, tests et limitations.
 - [docs/BILAN_PHASE_2.md](docs/BILAN_PHASE_2.md) : bilan de la phase 2 (Firebase), tests et limitations.
 - [docs/BILAN_PHASE_3.md](docs/BILAN_PHASE_3.md) : bilan de la phase 3 (agent IA), tests et limitations.
+- [docs/BILAN_PHASE_4.md](docs/BILAN_PHASE_4.md) : bilan de la phase 4 (AutoPilot, Réparateur, Gardien).
 - Guide utilisateur : l'onglet « Mode d'emploi » de l'application.

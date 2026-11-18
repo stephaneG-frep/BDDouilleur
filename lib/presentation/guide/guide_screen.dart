@@ -113,7 +113,29 @@ const _sections = <_Section>[
     'Vérifiez les fichiers et les différences, puis « Intégrer » : les fichiers existants sont sauvegardés.',
     'BDDouilleur lance ensuite l\'analyse et les tests générés. « Annuler » restaure l\'état d\'origine.',
   ]),
-  _Section('Utilisation d\'AutoPilot', Icons.auto_mode_rounded, ['Prévu en phase 4.'], available: false),
+  _Section('Modes Manuel, Assisté, AutoPilot', Icons.auto_mode_rounded, [
+    'Dans une conversation, touchez le badge de mode en haut à droite.',
+    'Manuel : vous validez chaque modification. Assisté : les ajouts de données du périmètre sont automatiques. '
+        'AutoPilot : la structure (tables, index) aussi.',
+    'Suppressions, SQL destructif, écritures en production et actions hors périmètre vous sont TOUJOURS soumises.',
+  ]),
+  _Section('Utiliser AutoPilot', Icons.rocket_launch_rounded, [
+    'Module AutoPilot → « Nouvel objectif » : décrivez le but et cochez les bases autorisées (périmètre).',
+    'L\'IA analyse la structure réelle et propose un plan d\'actions typées, validé sans rien exécuter.',
+    'Vérifiez le plan (risque de chaque étape), puis « Approuver et exécuter ».',
+    'Point de restauration avant toute modification, contrôle de chaque étape, correction automatique des erreurs récupérables, tests finaux.',
+    'Lisez le rapport ; « Annuler toute l\'exécution » remet les bases dans leur état d\'avant.',
+  ]),
+  _Section('Le Réparateur', Icons.build_circle_rounded, [
+    'Choisissez une base : intégrité, contraintes, migrations, index, requêtes lentes et configuration sont analysés.',
+    'Chaque correction affiche son risque ; une sauvegarde est faite avant toute modification des données.',
+    'Collez une requête dans « Analyser une requête » pour voir son plan d\'exécution et les index utiles.',
+  ]),
+  _Section('Le Gardien', Icons.shield_rounded, [
+    'Choisissez le dossier d\'un projet : identifiants exposés, injections SQL, connexions non chiffrées, permissions, '
+        'règles Firestore, RLS Supabase, environnements.',
+    'Les secrets sont toujours masqués dans le rapport ; révoquez ceux qui ont été exposés.',
+  ]),
   _Section('Pilotage depuis Android', Icons.phonelink_rounded, ['Prévu en phase 6.'], available: false),
 ];
 
