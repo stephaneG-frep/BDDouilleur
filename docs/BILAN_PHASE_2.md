@@ -9,7 +9,7 @@ Le module Firebase AutoPilot couvre toute la liste de la phase 2. Le niveau de v
 | Environnement | Niveau de vérification |
 |---|---|
 | **Émulateurs Firebase** (Firestore et Authentication) | **Vérifié de bout en bout**, avec la vraie suite d'émulateurs, sous Linux **et** sur le téléphone Android 16 : données, règles (génération, tests réels, déploiement) et parcours Authentication complet. |
-| **Vrai compte Google** | **Implémenté selon les API officielles, mais pas encore exécuté contre Google.** Il faut votre client OAuth et votre consentement dans le navigateur, ce qui ne peut pas se faire à votre place. Le code est vérifié par des tests contre un faux serveur Google (OAuth, AutoPilot). Pour cette raison, le module reste marqué « Partiel » dans l'application. |
+| **Vrai compte Google** | **Validé en réel sous Linux le 17/11/2026** (voir « Validation sur un vrai compte Google ») : connexion, analyse d'un projet existant, tests de règles, création d'un projet complet, Authentication. Connexion Google validée aussi **sur Android** (Honor, Android 16). Écriture Firestore, déploiement des règles et export FlutterFire validés le 18/11. Le module est désormais marqué « Opérationnel ». |
 
 ## Livré
 
@@ -153,17 +153,38 @@ Défauts trouvés et corrigés pendant la phase :
   - `setState` recevait un `Future` dans les vues Firebase (même défaut qu'en phase 1, corrigé partout) ;
 - trouvé à la relecture : la permission INTERNET manquait dans le manifeste release de BDDouilleur lui-même. Elle était indispensable pour les API Google.
 
+## Validation sur un vrai compte Google (17/11/2026, Linux)
+
+Essai mené avec le client OAuth « Application de bureau » de l'utilisateur, sur un projet existant (cousinade-2, en lecture seule) puis sur un projet jetable créé pour l'occasion (test-bddouilleur-1711).
+
+| Parcours | Résultat réel |
+|---|---|
+| Connexion OAuth (navigateur, loopback, PKCE), lecture de l'adresse, jetons dans le trousseau, déconnexion avec révocation | ✓ |
+| Analyse de cousinade-2 : Management, Billing, Service Usage, Firestore Admin, Rules, index, Identity Toolkit, applications Android | ✓ 0 bloquant |
+| Connexion du projet existant à BDDouilleur | ✓ |
+| Tests de règles par l'API Google `projects.test`, sans aucune donnée touchée | ✓ 7/7 |
+| AutoPilot, création complète : projet Google Cloud → Firebase → API → Firestore (europe-west9) → application Android → google-services.json → vérification | ✓ en 2 minutes environ |
+| Authentication non démarré : arrêt honnête avec lien vers la console, puis relance après le clic « Commencer » | ✓ toutes les étapes reconnues comme déjà faites, seule l'activation de l'e-mail / mot de passe et de la protection a agi |
+| Parcours Authentication sur le vrai projet : inscription, mauvais mot de passe refusé, connexion, renouvellement de session, vérification d'e-mail, réinitialisation, suppression du compte | ✓ 7/7 |
+| Connexion OAuth **sur Android** (Honor, Android 16) : navigateur du téléphone, retour sur 127.0.0.1 dans l'application | ✓ (l'erreur 401 initiale venait d'un identifiant mal saisi) |
+| Création d'un document sur le vrai projet (`POST …/documents/essai?documentId=premier`) | ✓ |
+| Règles : 10/10 tests conformes puis déploiement en production sur le projet jetable. Aucune publication n'existait encore, donc le chemin « création de la publication » a été emprunté. | ✓ |
+| Export FlutterFire vers un projet Flutter de test : google-services.json et firebase_options.dart corrects (projet, appId, expéditeur, bucket), et **le projet compile** avec `firebase_core` et `Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)` (`flutter analyze` : aucun problème) | ✓ |
+| Connexion Android après correction du défaut « réseau coupé en arrière-plan » (voir ci-dessous) | ✓ |
+
+Défauts révélés par ce test réel, corrigés (2 tests ajoutés, 57/57) :
+
+- **Consentement granulaire de Google.** Sur l'écran d'autorisation, l'utilisateur peut décocher l'accès « Google Cloud ». BDDouilleur acceptait alors la connexion, puis chaque API répondait « insufficient authentication scopes », affiché à tort comme un manque de droits sur le projet. Désormais :
+  - les accès accordés sont vérifiés à la connexion et à chaque rafraîchissement ;
+  - une autorisation incomplète est refusée et révoquée, avec un message qui dit quelles cases cocher ;
+  - surtout, cette erreur n'est plus prise pour « projet inexistant ». AutoPilot aurait sinon pu tenter de recréer un projet existant.
+- **Réseau coupé en arrière-plan (Honor).** Le code d'autorisation arrive pendant que le navigateur est encore au premier plan. L'échange contre les jetons partait alors que BDDouilleur était en arrière-plan, et le gestionnaire d'énergie du téléphone coupe le réseau des applications en arrière-plan (« Failed host lookup »). Désormais, BDDouilleur attend le retour au premier plan (`AppLifecycleListener`) et réessaie en cas d'erreur réseau. Le message d'erreur est en français, avec le réglage de batterie à vérifier. Au passage, le texte des messages d'erreur était illisible (rouge foncé sur fond rouge) : c'est corrigé partout. 2 tests ajoutés, **59/59**.
+- **Journal d'AutoPilot.** Les entrées ne contenaient pas leur requête REST : la dernière requête notée était un GET de suivi d'opération, filtré ensuite. C'est maintenant la dernière requête modifiante qui est notée.
+
 ## Limitations connues
 
-- **Pas encore exécuté contre un vrai compte Google.** Il faut :
-  1. créer un client OAuth « Application de bureau » ;
-  2. activer les API listées dans la fenêtre de configuration ;
-  3. vous connecter.
-
-  Points à valider à ce moment-là :
-  - le format exact de `projects.test` (API Rules) ;
-  - le parcours OAuth loopback sur **Android**, qui n'a pas été exécuté sur le téléphone ;
-  - les réponses réelles de chaque API.
+- **Pas encore essayé sur un vrai compte Google** : la création et la suppression d'index composites. La construction d'un index prend plusieurs minutes chez Google.
+- **Trousseau Linux** : une version de test de BDDouilleur ne retrouve pas les entrées rangées par la version release. La bibliothèque `flutter_secure_storage_linux` fixe le nom de schéma libsecret d'une façon fragile. À étudier avant la livraison : une mise à jour pourrait obliger à saisir à nouveau le client OAuth et à se reconnecter.
 - Storage n'est pas traité : il exige le plan Blaze, qui est facturable, et il ne fait pas partie de la liste de la phase 2.
 - Le fournisseur Google Sign-In reste à activer dans la console : Google n'offre pas d'API de bout en bout.
 - L'émulateur ne permet pas de relire ses règles. BDDouilleur affiche les dernières règles qu'il y a déployées.

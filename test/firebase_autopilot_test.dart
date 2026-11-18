@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:bddouilleur/data/firebase/firebase_autopilot.dart';
+import 'package:bddouilleur/data/firebase/firebase_management.dart';
 import 'package:bddouilleur/data/google/google_api.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -146,7 +147,11 @@ void main() {
   test('création complète puis relance sans rien recréer', () async {
     final g = FakeGoogle();
     final logs = <String>[];
-    final pilot = FirebaseAutoPilot(apiFor(g), onLog: (s, r, {success = true, error}) => logs.add(s));
+    final requests = <String?>[];
+    final pilot = FirebaseAutoPilot(apiFor(g), onLog: (s, r, {success = true, error}) {
+      logs.add(s);
+      requests.add(r);
+    });
     final r = await pilot.run(plan);
     expect(r.success, isTrue, reason: r.steps.map((s) => '${s.title}: ${s.status} ${s.detail}').join('\n'));
     expect(g.gcpExists && g.firebaseAdded && g.firestoreDb && g.emailEnabled, isTrue);
@@ -154,6 +159,8 @@ void main() {
     expect(g.androidApps.single['packageName'], 'fr.labo.app');
     expect(r.googleServicesJson, contains('AIzaFAKE'));
     expect(logs, contains('Projet Google Cloud « mon-labo » créé'));
+    expect(requests.first, 'POST https://cloudresourcemanager.googleapis.com/v3/projects');
+    expect(requests.every((r) => r != null && !r.startsWith('GET ')), isTrue);
 
     // Deuxième exécution : uniquement des vérifications.
     g.calls.clear();
@@ -217,5 +224,35 @@ void main() {
     await api.post('https://identitytoolkit.googleapis.com/v1/accounts:signUp', query: {'key': 'AIzaSECRET'});
     expect(api.requestLog.single, isNot(contains('AIzaSECRET')));
     expect(api.requestLog.single, 'POST https://identitytoolkit.googleapis.com/v1/accounts:signUp');
+  });
+
+  test('portée OAuth insuffisante : message explicite, jamais « projet inexistant »', () async {
+    final e = GoogleApiException.fromResponse(
+      http.Response(
+          jsonEncode({
+            'error': {
+              'code': 403,
+              'status': 'PERMISSION_DENIED',
+              'message': 'Request had insufficient authentication scopes.',
+              'details': [
+                {'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'ACCESS_TOKEN_SCOPE_INSUFFICIENT'}
+              ]
+            }
+          }),
+          403),
+      'GET https://firebase.googleapis.com/v1beta1/projects',
+    );
+    expect(e.isScopeInsufficient, isTrue);
+    expect(e.explanation, contains('cochez TOUTES les cases'));
+
+    final api = GoogleApiClient(
+        client: MockClient((_) async => http.Response(
+            jsonEncode({
+              'error': {'code': 403, 'status': 'PERMISSION_DENIED', 'message': 'Request had insufficient authentication scopes.'}
+            }),
+            403)),
+        authHeader: () async => 'Bearer x');
+    await expectLater(FirebaseManagementService(api).gcpProjectState('mon-labo'), throwsA(isA<GoogleApiException>()));
+    await expectLater(FirebaseManagementService(api).getFirebaseProject('mon-labo'), throwsA(isA<GoogleApiException>()));
   });
 }

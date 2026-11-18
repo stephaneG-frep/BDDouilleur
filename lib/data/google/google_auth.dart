@@ -66,12 +66,47 @@ class GoogleAuthService {
     http.Client? client,
     this.endpoints = const GoogleOAuthEndpoints(),
     this.loginTimeout = const Duration(minutes: 5),
+    this.waitForForeground,
+    this.networkRetryDelays = const [
+      Duration(seconds: 1),
+      Duration(seconds: 2),
+      Duration(seconds: 3),
+      Duration(seconds: 5),
+      Duration(seconds: 8),
+    ],
   }) : _http = client ?? http.Client();
+
+  /// Attend que l'application soit revenue au premier plan. Certains
+  /// téléphones (Honor, Huawei, Xiaomi…) coupent le réseau des applications
+  /// en arrière-plan : l'échange du code doit donc attendre le retour.
+  final Future<void> Function()? waitForForeground;
+
+  /// Nouvelles tentatives en cas d'erreur réseau (réseau pas encore rétabli).
+  final List<Duration> networkRetryDelays;
 
   final SecretStore secrets;
   final BrowserLauncher launcher;
   final GoogleOAuthEndpoints endpoints;
   final Duration loginTimeout;
+
+  static const networkErrorMessage =
+      'Réseau injoignable pour BDDouilleur (serveurs Google introuvables). Vérifiez la connexion Internet. '
+      'Sur certains téléphones (Honor, Huawei…), le gestionnaire d\'énergie coupe le réseau des applications '
+      'en arrière-plan : autorisez BDDouilleur à fonctionner en arrière-plan, puis réessayez.';
+
+  /// Requête avec nouvelles tentatives sur erreur réseau uniquement.
+  Future<http.Response> _withRetry(Future<http.Response> Function() send) async {
+    for (var attempt = 0;; attempt++) {
+      try {
+        return await send();
+      } on SocketException {
+        if (attempt >= networkRetryDelays.length) throw GoogleAuthException(networkErrorMessage);
+      } on http.ClientException {
+        if (attempt >= networkRetryDelays.length) throw GoogleAuthException(networkErrorMessage);
+      }
+      await Future<void>.delayed(networkRetryDelays[attempt]);
+    }
+  }
   final http.Client _http;
 
   static const scopes = [
@@ -80,6 +115,21 @@ class GoogleAuthService {
     'https://www.googleapis.com/auth/cloud-platform',
     'https://www.googleapis.com/auth/firebase',
   ];
+
+  /// Accès indispensable : sans lui, aucune API Cloud/Firebase ne répond.
+  static const requiredScope = 'https://www.googleapis.com/auth/cloud-platform';
+
+  static const scopeInsufficientMessage =
+      'Autorisation incomplète : l\'accès « Google Cloud » (voir, modifier, configurer et supprimer vos données '
+      'Google Cloud) n\'a pas été accordé. Sur l\'écran de consentement de Google, cochez TOUTES les cases, '
+      'puis reconnectez-vous.';
+
+  /// Vérifie les accès réellement accordés (consentement granulaire de Google).
+  static void checkGrantedScopes(Map<String, dynamic> tokens) {
+    final scope = tokens['scope'];
+    if (scope is! String) return; // Google omet parfois le champ lors d'un rafraîchissement.
+    if (!scope.split(' ').contains(requiredScope)) throw GoogleAuthException(scopeInsufficientMessage);
+  }
 
   String? _accessToken;
   DateTime? _accessExpiry;
@@ -159,6 +209,8 @@ class GoogleAuthService {
       final code = await _waitForCode(server, state).timeout(loginTimeout, onTimeout: () {
         throw GoogleAuthException('Délai dépassé : aucune autorisation reçue du navigateur.');
       });
+      // Le code arrive souvent alors que le navigateur est encore au premier plan.
+      await waitForForeground?.call();
       final tokens = await _postToken({
         'grant_type': 'authorization_code',
         'code': code,
@@ -168,6 +220,17 @@ class GoogleAuthService {
         'client_secret': config.clientSecret,
       });
       final refresh = tokens['refresh_token'] as String?;
+      try {
+        checkGrantedScopes(tokens);
+      } on GoogleAuthException {
+        // Autorisation partielle inutilisable : on la révoque au lieu de la garder.
+        if (refresh != null) {
+          try {
+            await _http.post(Uri.parse(endpoints.revoke), body: {'token': refresh});
+          } catch (_) {}
+        }
+        rethrow;
+      }
       if (refresh == null) {
         throw GoogleAuthException('Google n\'a pas fourni de jeton de rafraîchissement.');
       }
@@ -218,7 +281,7 @@ class GoogleAuthService {
       '<p>${const HtmlEscape().convert(msg)}</p></div></body></html>';
 
   Future<Map<String, dynamic>> _postToken(Map<String, String> body) async {
-    final res = await _http.post(Uri.parse(endpoints.token), body: body);
+    final res = await _withRetry(() => _http.post(Uri.parse(endpoints.token), body: body));
     final Map<String, dynamic> json;
     try {
       json = jsonDecode(res.body) as Map<String, dynamic>;
@@ -245,7 +308,8 @@ class GoogleAuthService {
   }
 
   Future<String> _fetchEmail() async {
-    final res = await _http.get(Uri.parse(endpoints.userInfo), headers: {'Authorization': 'Bearer $_accessToken'});
+    final res = await _withRetry(
+        () => _http.get(Uri.parse(endpoints.userInfo), headers: {'Authorization': 'Bearer $_accessToken'}));
     if (res.statusCode != 200) throw GoogleAuthException('Impossible de lire le profil du compte (HTTP ${res.statusCode}).');
     final email = (jsonDecode(res.body) as Map<String, dynamic>)['email'] as String?;
     if (email == null) throw GoogleAuthException('Le profil Google ne contient pas d\'adresse e-mail.');
@@ -268,6 +332,7 @@ class GoogleAuthService {
       'client_id': config.clientId,
       'client_secret': config.clientSecret,
     });
+    checkGrantedScopes(tokens);
     _applyAccess(tokens);
     return _accessToken!;
   }

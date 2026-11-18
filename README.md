@@ -22,7 +22,7 @@ BDDouilleur est une application Flutter (Linux et Android) qui crée, gère, sau
 | Le Professeur : 13 leçons, et des explications des opérations réellement exécutées | ✅ |
 | Mode d'emploi intégré | ✅ |
 | Firebase sur émulateurs : données Firestore, règles (génération, tests réels, déploiement), parcours Authentication | ✅ vérifié (Linux et Android) |
-| Firebase sur votre compte Google : OAuth 2.0 (PKCE), création de projet complet, projets existants, index, règles, Authentication, fichiers FlutterFire | ✅ implémenté, à valider avec votre client OAuth |
+| Firebase sur votre compte Google : OAuth 2.0 (PKCE), création de projet complet, projets existants, index, règles, Authentication, fichiers FlutterFire | ✅ validé sur un vrai compte (Linux et Android) |
 | Firebase Rescue : diagnostic d'un projet Flutter, corrections confirmées avec sauvegarde `.bak` | ✅ |
 | Agent IA, AutoPilot, PostgreSQL, pilotage Android/Linux, Firebase Storage | Prévus, phases 3 à 6 |
 

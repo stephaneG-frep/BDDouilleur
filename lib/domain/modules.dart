@@ -60,7 +60,7 @@ const modules = <ModuleInfo>[
     tagline: 'Créer et configurer Firebase',
     icon: Icons.local_fire_department_rounded,
     colors: [BddColors.orange, BddColors.rose],
-    status: ModuleStatus.partial,
+    status: ModuleStatus.available,
     phase: 2,
     availableNow: [
       'Émulateurs : données Firestore, règles (génération, tests réels, déploiement), parcours Authentication',
@@ -69,7 +69,6 @@ const modules = <ModuleInfo>[
       'Firebase Rescue : diagnostic d\'un projet Flutter avec corrections confirmées',
     ],
     comingLater: [
-      'Validation sur un vrai compte Google (nécessite votre client OAuth)',
       'Firebase Storage (exige le plan Blaze, facturable)',
       'Activation automatique du fournisseur Google Sign-In (console uniquement aujourd\'hui)',
     ],

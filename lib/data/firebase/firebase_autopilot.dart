@@ -112,7 +112,9 @@ class FirebaseAutoPilot {
       }
     }
 
-    void logged(String summary) => onLog?.call(summary, api.requestLog.isEmpty ? null : api.requestLog.last);
+    // Dernière requête modifiante (les GET de suivi d'opération sont ignorés).
+    void logged(String summary) =>
+        onLog?.call(summary, api.requestLog.reversed.where((r) => !r.startsWith('GET ')).firstOrNull);
 
     if (!await guard('gcp', () async {
       final state = await _mgmt.gcpProjectState(id);
