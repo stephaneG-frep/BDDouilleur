@@ -79,10 +79,14 @@ const modules = <ModuleInfo>[
     tagline: 'Analyser un projet ou une BDD',
     icon: Icons.manage_search_rounded,
     colors: [BddColors.turquoise, BddColors.vert],
-    status: ModuleStatus.partial,
+    status: ModuleStatus.available,
     phase: 3,
-    availableNow: ['Inspection d\'une base SQLite : tables, colonnes, clés, index, nombre de lignes'],
-    comingLater: ['Analyse de dossiers de projets Flutter, React, Python… (phase 3)'],
+    availableNow: [
+      'Analyse de dossiers Flutter, React, Angular, Vue, Node, Python : modèles, stockage, authentification, API',
+      'Proposition d\'architecture de données applicable',
+      'Inspection d\'une base SQLite : tables, colonnes, clés, index',
+    ],
+    comingLater: ['Analyse approfondie par l\'agent IA (disponible depuis l\'analyse)'],
   ),
   ModuleInfo(
     id: ModuleId.reparateur,
@@ -101,10 +105,14 @@ const modules = <ModuleInfo>[
     tagline: 'Relier une BDD à une application',
     icon: Icons.cable_rounded,
     colors: [BddColors.violet, BddColors.rose],
-    status: ModuleStatus.planned,
+    status: ModuleStatus.available,
     phase: 3,
-    availableNow: [],
-    comingLater: ['Génération de modèles Dart, repositories et services', 'Intégration avec aperçu des différences'],
+    availableNow: [
+      'Génération Flutter : modèles, dépôts sqflite ou Firestore, services, tests unitaires et d\'intégration',
+      'Plan, différences et point de restauration avant écriture',
+      'Vérification réelle (analyse statique et tests) sur PC',
+    ],
+    comingLater: ['Autres frameworks (React, Python) en phase ultérieure'],
   ),
   ModuleInfo(
     id: ModuleId.schematiseur,
@@ -117,8 +125,9 @@ const modules = <ModuleInfo>[
     availableNow: [
       'Création de tables : types, clés primaires et étrangères, contraintes, valeurs par défaut',
       'Aperçu du SQL en direct',
+      'Schéma depuis une description en français (agent IA)',
     ],
-    comingLater: ['Éditeur graphique avec relations, zoom et migrations (phase 5)', 'Schéma depuis une description en français (phase 3)'],
+    comingLater: ['Éditeur graphique avec relations, zoom et migrations (phase 5)'],
   ),
   ModuleInfo(
     id: ModuleId.coffreFort,
@@ -155,7 +164,7 @@ const modules = <ModuleInfo>[
     status: ModuleStatus.available,
     phase: 1,
     availableNow: ['Leçons en français', 'Explication des opérations réellement exécutées sur vos bases'],
-    comingLater: ['Explications détaillées par l\'agent IA (phase 3)'],
+    comingLater: ['Leçons interactives avec l\'agent IA'],
   ),
   ModuleInfo(
     id: ModuleId.autopilot,

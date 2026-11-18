@@ -4,7 +4,7 @@
 
 BDDouilleur est une application Flutter (Linux et Android) qui crée, gère, sauvegarde et explique des bases de données. À terme, ce sera un agent IA capable de s'occuper de toute la partie base de données d'un projet. La spécification complète se trouve dans [SPEC.md](SPEC.md).
 
-**Version actuelle : 0.2.0, phase 2 (Firebase AutoPilot).**
+**Version actuelle : 0.3.0, phase 3 (agent IA).**
 
 ## Ce qui fonctionne aujourd'hui
 
@@ -24,7 +24,10 @@ BDDouilleur est une application Flutter (Linux et Android) qui crée, gère, sau
 | Firebase sur émulateurs : données Firestore, règles (génération, tests réels, déploiement), parcours Authentication | ✅ vérifié (Linux et Android) |
 | Firebase sur votre compte Google : OAuth 2.0 (PKCE), création de projet complet, projets existants, index, règles, Authentication, fichiers FlutterFire | ✅ validé sur un vrai compte (Linux et Android) |
 | Firebase Rescue : diagnostic d'un projet Flutter, corrections confirmées avec sauvegarde `.bak` | ✅ |
-| Agent IA, AutoPilot, PostgreSQL, pilotage Android/Linux, Firebase Storage | Prévus, phases 3 à 6 |
+| Agent IA : Claude, OpenAI, Gemini, Mistral, Ollama ; 14 outils réels ; accord avant toute modification ; historique par projet | ✅ (à valider avec votre clé ou Ollama) |
+| Le Détective : analyse de projets Flutter, React, Angular, Vue, Node, Python et proposition de schéma | ✅ |
+| Le Connecteur : code Flutter (modèles, dépôts sqflite ou Firestore, services, tests), plan, différences, restauration, vérification | ✅ vérifié dans de vrais projets |
+| AutoPilot, PostgreSQL, pilotage Android/Linux, Firebase Storage | Prévus, phases 4 à 6 |
 
 Les modules qui ne sont pas encore disponibles affichent une fiche qui le dit clairement. Aucun bouton ne fait semblant de fonctionner.
 
@@ -60,6 +63,9 @@ cd tool/firebase_emulator && firebase emulators:exec --only firestore,auth \
   --project demo-bddouilleur "cd ../.. && flutter test integration_test/firebase_emulator_ui_test.dart -d linux"
 flutter test integration_test/secret_store_test.dart -d linux   # trousseau réel
 
+# Génération de code : test de bout en bout dans de vrais projets Flutter (réseau requis)
+flutter test tool/codegen_e2e_test.dart
+
 # Outils
 flutter test tool/generate_icon.dart     # régénère l'icône depuis la mascotte
 flutter test tool/screenshots.dart       # captures dans build/screenshots/
@@ -80,6 +86,12 @@ Cloud Billing. Saisissez ensuite l'identifiant et le secret dans Firebase AutoPi
 ils sont rangés dans le trousseau du système, jamais dans l'application ni dans le
 journal. BDDouilleur n'active jamais la facturation.
 
+## Agent IA
+
+Onglet **Agent IA**, puis l'icône des réglages : collez une clé (Anthropic, OpenAI, Gemini, Mistral) ou
+indiquez l'adresse d'Ollama, puis « Enregistrer et tester ». Les clés vont dans le trousseau du système.
+L'agent n'agit que par des outils typés et journalisés, et chaque modification vous est soumise.
+
 ## Où sont les données ?
 
 - Linux : `~/.local/share/fr.bddouilleur.bddouilleur/`
@@ -87,7 +99,7 @@ journal. BDDouilleur n'active jamais la facturation.
 
 Contenu de ce dossier :
 
-- `bddouilleur_app.db` : projets, connexions, journal et réglages. Aucun secret n'y est stocké :
+- `bddouilleur_app.db` : projets, connexions, conversations de l'agent, journal et réglages. Aucun secret n'y est stocké :
   les jetons et identifiants OAuth sont dans le trousseau du système (GNOME Keyring, Android Keystore).
 - `databases/projet_<id>/*.db` : les bases créées par La Fabrique.
 - `backups/connexion_<id>/*.db` : les sauvegardes du Coffre-fort.
@@ -97,4 +109,5 @@ Contenu de ce dossier :
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) : architecture technique et choix effectués.
 - [docs/BILAN_PHASE_1.md](docs/BILAN_PHASE_1.md) : bilan de la phase 1, tests et limitations.
 - [docs/BILAN_PHASE_2.md](docs/BILAN_PHASE_2.md) : bilan de la phase 2 (Firebase), tests et limitations.
+- [docs/BILAN_PHASE_3.md](docs/BILAN_PHASE_3.md) : bilan de la phase 3 (agent IA), tests et limitations.
 - Guide utilisateur : l'onglet « Mode d'emploi » de l'application.

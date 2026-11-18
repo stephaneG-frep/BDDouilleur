@@ -148,6 +148,14 @@ class SqlSafety {
 
   static bool isDestructive(String sql) => _destructive.hasMatch(_strip(sql));
 
+  static final _write = RegExp(
+    r'\b(INSERT|CREATE|ATTACH|BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|ANALYZE)\b',
+    caseSensitive: false,
+  );
+
+  /// Vrai si la requête peut écrire ou changer l'état de la base.
+  static bool isWriteLike(String sql) => isDestructive(sql) || _write.hasMatch(_strip(sql));
+
   static List<String> destructiveKeywords(String sql) =>
       _destructive.allMatches(_strip(sql)).map((m) => m.group(1)!.toUpperCase()).toSet().toList();
 }

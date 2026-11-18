@@ -57,8 +57,18 @@ const _sections = <_Section>[
     '« Impossible d\'ouvrir la base SQLite » : le fichier n\'existe pas, n\'est pas une base SQLite ou n\'est pas accessible.',
     'L\'onglet « Santé » d\'une base lance un diagnostic d\'intégrité.',
   ]),
-  _Section('Connexion à une IA', Icons.smart_toy_rounded, ['Prévu en phase 3 (OpenAI, Claude, Gemini, Mistral, Ollama).'],
-      available: false),
+  _Section('Connecter une IA', Icons.smart_toy_rounded, [
+    'Onglet Agent IA → icône des réglages → choisissez Anthropic Claude, OpenAI, Google Gemini, Mistral ou Ollama (local, gratuit).',
+    'Collez votre clé API : elle va dans le trousseau du système, jamais dans la base ni le journal.',
+    '« Enregistrer et tester » liste les modèles réellement disponibles ; choisissez-en un.',
+    'Pour Ollama : installez-le, lancez « ollama serve » et téléchargez un modèle qui sait utiliser des outils (ex. ollama pull qwen3).',
+  ]),
+  _Section('Discuter avec l\'agent', Icons.forum_rounded, [
+    'Agent IA → « Nouvelle conversation » : choisissez le fournisseur, une base par défaut et, si besoin, un dossier de projet lisible.',
+    'L\'agent lit vos bases et vos fichiers avec de vrais outils. Chaque action affichée indique son résultat réel.',
+    'Toute modification (création de tables, SQL, écriture Firestore) vous est soumise : « Autoriser » ou « Refuser ».',
+    'Les conversations sont conservées par projet ; les actions figurent aussi dans le journal.',
+  ]),
   _Section('Tester Firebase sans compte (émulateurs)', Icons.science_rounded, [
     'Installez firebase-tools (npm install -g firebase-tools) et Java 11 ou plus.',
     'Lancez : firebase emulators:start --only firestore,auth --project demo-monprojet',
@@ -91,7 +101,18 @@ const _sections = <_Section>[
     'Les corrections automatiques montrent les fichiers modifiés, demandent confirmation et gardent une copie .bak.',
   ]),
   _Section('Connexion à PostgreSQL', Icons.dns_rounded, ['Prévu en phase 5.'], available: false),
-  _Section('Analyse d\'un projet Flutter', Icons.manage_search_rounded, ['Prévu en phase 3.'], available: false),
+  _Section('Analyser un projet', Icons.manage_search_rounded, [
+    'Le Détective → « Un dossier de projet » : Flutter, React, Angular, Vue, Node, Python…',
+    'L\'analyse (sans IA, sans modification) détecte modèles, stockage, authentification, services et appels API.',
+    'Une architecture de données est proposée : créez-la dans une base SQLite ou générez le code.',
+    '« Demander à l\'agent IA » ouvre une conversation qui approfondit l\'analyse.',
+  ]),
+  _Section('Générer le code Flutter', Icons.code_rounded, [
+    'Le Connecteur → choisissez une base SQLite, ou « Générer le code Flutter » depuis une proposition de schéma.',
+    'Choisissez SQLite (sqflite) ou Firestore et le dossier du projet Flutter, puis « Calculer le plan ».',
+    'Vérifiez les fichiers et les différences, puis « Intégrer » : les fichiers existants sont sauvegardés.',
+    'BDDouilleur lance ensuite l\'analyse et les tests générés. « Annuler » restaure l\'état d\'origine.',
+  ]),
   _Section('Utilisation d\'AutoPilot', Icons.auto_mode_rounded, ['Prévu en phase 4.'], available: false),
   _Section('Pilotage depuis Android', Icons.phonelink_rounded, ['Prévu en phase 6.'], available: false),
 ];

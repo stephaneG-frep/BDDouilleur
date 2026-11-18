@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
+import 'agent/agent_screen.dart';
 import 'guide/guide_screen.dart';
 import 'home/home_screen.dart';
 import 'journal/journal_screen.dart';
@@ -23,16 +24,18 @@ class AppShellState extends State<AppShell> {
 
   static const _destinations = [
     (Icons.science_outlined, Icons.science_rounded, 'Laboratoire'),
+    (Icons.smart_toy_outlined, Icons.smart_toy_rounded, 'Agent IA'),
     (Icons.folder_outlined, Icons.folder_rounded, 'Projets'),
     (Icons.receipt_long_outlined, Icons.receipt_long_rounded, 'Journal'),
-    (Icons.menu_book_outlined, Icons.menu_book_rounded, 'Mode d\'emploi'),
+    (Icons.menu_book_outlined, Icons.menu_book_rounded, 'Guide'),
   ];
 
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 840;
     final pages = [
-      HomeScreen(onOpenProjects: () => goTo(1)),
+      HomeScreen(onOpenProjects: () => goTo(2)),
+      const AgentScreen(),
       const ProjectsScreen(),
       const JournalScreen(),
       const GuideScreen(),
