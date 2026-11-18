@@ -11,6 +11,7 @@ import '../../data/ai/agent.dart';
 import '../../data/ai/ai_repository.dart';
 import '../../data/codegen/flutter_codegen.dart';
 import '../../domain/ai/ai_models.dart';
+import '../../domain/autopilot/autonomy.dart';
 import '../../domain/models/journal_entry.dart';
 import '../../domain/schema_proposal.dart';
 import '../../state/agent_tools.dart';
@@ -37,6 +38,7 @@ class _ChatScreenState extends State<ChatScreen> {
   AiConversation? _conv;
   bool _running = false;
   bool _cancel = false;
+  AgentToolbox? _box;
   String? _error;
 
   AppState get _state => context.read<AppState>();
@@ -112,8 +114,16 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
       final provider = await _state.providerFor(conv.provider);
-      final box = AgentToolbox(AgentContext(state: _state, project: project, folder: conv.folder, connectionId: conv.connectionId));
-      final agent = Agent(provider: provider, model: conv.model, tools: box.tools(), system: box.systemPrompt());
+      final box = AgentToolbox(AgentContext(
+          state: _state, project: project, folder: conv.folder, connectionId: conv.connectionId, mode: conv.mode));
+      final agent = Agent(
+        provider: provider,
+        model: conv.model,
+        tools: box.tools(),
+        system: '${box.systemPrompt()}\n- Mode d\'autonomie : ${conv.mode.label} (${conv.mode.help})',
+        needsConfirmation: box.needsConfirmation,
+      );
+      _box = box;
       int? pendingIn, pendingOut;
       await agent.runTurn(
         [..._messages],
@@ -167,6 +177,19 @@ class _ChatScreenState extends State<ChatScreen> {
               Text(AgentToolbox.label(call), style: const TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               Text(tool.describe(call.arguments)),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, runSpacing: 4, children: [
+                StatusChip(
+                  label: 'Risque : ${tool.risk(call.arguments).label}',
+                  color: tool.risk(call.arguments).index >= ActionRisk.destructive.index ? BddColors.rose : BddColors.orange,
+                  icon: Icons.speed_rounded,
+                ),
+              ]),
+              const SizedBox(height: 4),
+              Text(
+                ActionPolicy.explain(_conv!.mode, tool.risk(call.arguments), inScope: _box?.inScope(tool, call.arguments) ?? true),
+                style: Theme.of(ctx).textTheme.bodySmall,
+              ),
               const SizedBox(height: 8),
               ExpansionTile(
                 tilePadding: EdgeInsets.zero,
@@ -222,7 +245,43 @@ class _ChatScreenState extends State<ChatScreen> {
           Text('${conv.provider.label} • ${conv.model}${tin + tout == 0 ? '' : ' • $tin / $tout jetons'}',
               style: Theme.of(context).textTheme.bodySmall),
         ]),
-        actions: [IconButton(tooltip: 'Changer de modèle', icon: const Icon(Icons.tune_rounded), onPressed: _running ? null : _changeModel)],
+        actions: [
+          PopupMenuButton<AutonomyMode>(
+            tooltip: 'Mode d\'autonomie',
+            enabled: !_running,
+            initialValue: conv.mode,
+            onSelected: (m) {
+              _state.aiConversations.setMode(conv.id, m);
+              _state.journal.log(
+                  projectId: conv.projectId,
+                  action: JournalAction.agentConversation,
+                  summary: 'Conversation « ${conv.title} » : mode ${m.label}');
+              _reload();
+            },
+            itemBuilder: (_) => [
+              for (final m in AutonomyMode.values)
+                PopupMenuItem(
+                  value: m,
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(m == conv.mode ? Icons.radio_button_checked : Icons.radio_button_off),
+                    title: Text(m.label),
+                    subtitle: Text(m.help),
+                  ),
+                ),
+            ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: StatusChip(
+                label: conv.mode.label,
+                color: conv.mode == AutonomyMode.manual ? BddColors.turquoise : BddColors.orange,
+                icon: Icons.auto_mode_rounded,
+              ),
+            ),
+          ),
+          IconButton(tooltip: 'Changer de modèle', icon: const Icon(Icons.tune_rounded), onPressed: _running ? null : _changeModel),
+        ],
       ),
       body: Column(children: [
         if (conv.folder != null || conv.connectionId != null)
@@ -352,7 +411,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ? (Icons.block_rounded, BddColors.orange, 'refusé par vous')
             : r.isError
                 ? (Icons.error_rounded, BddColors.rose, 'échec')
-                : (Icons.check_circle_rounded, BddColors.vert, 'exécuté');
+                : (Icons.check_circle_rounded, BddColors.vert, r.autoApproved ? 'exécuté automatiquement (mode ${_conv!.mode.label})' : 'exécuté');
     Map<String, Object?>? payload;
     if (r != null && !r.isError) {
       try {

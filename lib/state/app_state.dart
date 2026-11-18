@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/ai/ai_providers.dart';
 import '../data/ai/ai_repository.dart';
 import '../data/ai/ai_settings.dart';
+import '../data/ai/autopilot_repository.dart';
 import '../data/backup/sqlite_backup_service.dart';
 import '../data/codegen/code_integrator.dart';
 import '../data/connectors/database_connector.dart';
@@ -112,6 +113,7 @@ class AppState extends ChangeNotifier {
   // ------------------------------------------------------------------ IA
   late final AiSettings ai = AiSettings(appDb, secrets);
   late final AiRepository aiConversations = AiRepository(appDb);
+  late final AutopilotRepository autopilotRuns = AutopilotRepository(appDb);
   CodeIntegrator codeIntegrator = CodeIntegrator();
 
   /// Fabrique de fournisseurs (remplaçable dans les tests).

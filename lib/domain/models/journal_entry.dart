@@ -35,7 +35,10 @@ enum JournalAction {
   agentConversation('Conversation avec l\'agent IA'),
   codeGenerated('Code généré et intégré'),
   codeRestored('Intégration de code annulée'),
-  schemaApplied('Schéma appliqué');
+  schemaApplied('Schéma appliqué'),
+  autopilotRun('AutoPilot'),
+  repairApplied('Correction du Réparateur'),
+  securityAudit('Audit de sécurité (Le Gardien)');
 
   const JournalAction(this.label);
   final String label;

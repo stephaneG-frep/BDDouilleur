@@ -39,7 +39,8 @@ class AiToolCall {
 }
 
 class AiToolResult {
-  const AiToolResult({required this.callId, required this.name, required this.content, this.isError = false});
+  const AiToolResult(
+      {required this.callId, required this.name, required this.content, this.isError = false, this.autoApproved = false});
   final String callId;
   final String name;
 
@@ -47,12 +48,17 @@ class AiToolResult {
   final String content;
   final bool isError;
 
-  Map<String, Object?> toJson() => {'callId': callId, 'name': name, 'content': content, 'isError': isError};
+  /// Action modifiante exécutée sans confirmation, selon le mode d'autonomie.
+  final bool autoApproved;
+
+  Map<String, Object?> toJson() =>
+      {'callId': callId, 'name': name, 'content': content, 'isError': isError, if (autoApproved) 'autoApproved': true};
   factory AiToolResult.fromJson(Map<String, Object?> j) => AiToolResult(
         callId: j['callId'] as String,
         name: j['name'] as String,
         content: j['content'] as String,
         isError: j['isError'] == true,
+        autoApproved: j['autoApproved'] == true,
       );
 }
 

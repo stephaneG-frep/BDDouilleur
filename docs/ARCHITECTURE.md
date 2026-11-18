@@ -12,6 +12,7 @@ lib/
 │   ├── models/                  Project, DbConnection, DbEngine, schéma, journal
 │   ├── modules.dart             Catalogue des 10 modules et leur statut réel
 │   ├── ai/ai_models.dart        Format neutre des messages, outils, réponses et erreurs IA
+│   ├── autopilot/               Modes d'autonomie, risques des actions, plans et exécutions
 │   ├── schema_proposal.dart     Proposition d'architecture (validation, tables SQLite, règles Firestore)
 │   ├── text_diff.dart           Différences ligne à ligne (aperçu avant écriture)
 │   ├── firebase/                Cible Firebase, règles (générateur, analyseur, cas de test), FlutterFire
@@ -27,9 +28,12 @@ lib/
 │   ├── firebase/                Management, Firestore (données, admin), règles, Auth, AutoPilot, Rescue
 │   ├── ai/                      Adaptateurs des 5 fournisseurs, boucle d'agent, réglages, historique
 │   ├── analysis/                Analyse déterministe de dossiers de projets
-│   └── codegen/                 Générateur Flutter et intégrateur (restauration, vérification)
+│   ├── codegen/                 Générateur Flutter et intégrateur (restauration, vérification)
+│   ├── repair/                  Le Réparateur : diagnostic SQLite et corrections typées
+│   └── security/                Le Gardien : audit de sécurité statique
 ├── state/app_state.dart         Services, état global, opérations journalisées
-├── state/agent_tools.dart       Les 14 outils réels de l'agent (lecture / modification avec accord)
+├── state/agent_tools.dart       Les 18 outils réels de l'agent, avec risque, validation et périmètre
+├── state/autopilot_engine.dart  Moteur AutoPilot : plan, exécution contrôlée, corrections, tests, rapport, retour arrière
 └── presentation/                Écrans (accueil, projets, Fabrique, base, table,
                                  console SQL, Coffre-fort, journal, Professeur, guide)
 test/                            Tests unitaires et widgets
@@ -38,7 +42,7 @@ integration_test/                Persistance (deux lancements), parcours Firebas
 tool/                            Icône, captures, émulateurs Firebase (firebase.json, script de tests)
 ```
 
-Les couches présentes sont la présentation, le domaine, les connecteurs, la persistance, le stockage sécurisé des secrets, l'authentification Google et l'intégration Firebase (phase 2), ainsi que les tests. La phase 3 ajoute le moteur IA multifournisseur, l'analyse de projets et la génération de code. Les couches suivantes arriveront avec leur phase : orchestrateur AutoPilot et exécuteur sécurisé (4), service Linux et communication Android (6).
+Les couches présentes sont la présentation, le domaine, les connecteurs, la persistance, le stockage sécurisé des secrets, l'authentification Google et l'intégration Firebase (phase 2), ainsi que les tests. La phase 3 a ajouté le moteur IA multifournisseur, l'analyse de projets et la génération de code. La phase 4 ajoute l'orchestrateur AutoPilot, son exécuteur d'actions typées, Le Réparateur et Le Gardien. Le service Linux et la communication Android arriveront en phase 6.
 
 ## Principes
 
@@ -53,6 +57,8 @@ Les couches présentes sont la présentation, le domaine, les connecteurs, la pe
 9. **Pas de clé intégrée.** BDDouilleur utilise le client OAuth « Application de bureau » de l'utilisateur, qui le saisit à l'exécution.
 10. **L'IA n'agit que par des outils.** Le modèle ne dispose d'aucune commande système. Les outils en lecture s'exécutent directement. Les outils modifiants exigent un accord explicite, et leurs effets passent par les mêmes chemins journalisés que l'interface (`runLogged`, `runFirebase`). Seuls les résultats d'outils font foi, jamais le texte du modèle.
 11. **Code généré par modèles déterministes.** L'IA choisit le schéma ; le code vient de modèles de code testés. Le plan est affiché avec les différences, puis intégré avec un point de restauration, puis vérifié (`dart analyze`, `flutter test`).
+12. **Autonomie bornée.** Chaque action a un niveau de risque : lecture, courante, structure, destructive ou sensible. Le mode (Manuel, Assisté, AutoPilot) décide de ce qui s'exécute sans confirmation. Les suppressions, le SQL destructif, la production et ce qui sort du périmètre exigent toujours une confirmation explicite.
+13. **AutoPilot n'exécute que des plans validés.** Le modèle propose ; BDDouilleur valide le plan à blanc (outil, arguments, périmètre), l'exécute lui-même, contrôle chaque effet réel et teste l'intégrité. Une correction n'est jamais plus risquée que l'étape approuvée. Le retour arrière restaure les sauvegardes prises avant l'exécution.
 
 ## Choix techniques
 
@@ -71,10 +77,10 @@ Les couches présentes sont la présentation, le domaine, les connecteurs, la pe
 
 Le connecteur SQLite est synchrone derrière une API `Future`. C'est sans conséquence pour des bases de taille courante. Les lectures sont paginées (50 lignes) et la console limite l'affichage à 500 lignes. Si de très grosses bases deviennent un besoin, l'exécution sera déplacée dans un isolate.
 
-## Base interne (schéma v3)
+## Base interne (schéma v4)
 
 - `projects(id, name, description, created_at, updated_at)`
 - `connections(id, project_id → projects ON DELETE CASCADE, name, engine, location, created_at, last_opened_at, config)`. Pour Firestore, `location` contient l'identifiant du projet, et `config` un JSON non sensible : mode émulateur ou Google, base, hôtes de l'émulateur, dernières règles déployées sur l'émulateur. La colonne `config` est ajoutée par la migration v2.
 - `journal(id, project_id, connection_id, action, summary, sql, success, error, timestamp)`
 - `settings(key, value)` : thème, projet actif, fournisseur et modèle d'IA (jamais de clé).
-- `ai_conversations(id, project_id, title, provider, model, folder, connection_id, …)` et `ai_messages(id, conversation_id, role, content JSON, jetons, …)`, ajoutées par la migration v3.
+- `ai_conversations(id, project_id, title, provider, model, folder, connection_id, …)` et `ai_messages(id, conversation_id, role, content JSON, jetons, …)`, ajoutées par la migration v3. La migration v4 ajoute la colonne `mode` des conversations et la table `autopilot_runs` (plan, état, contrôles, informations de retour arrière, rapport).

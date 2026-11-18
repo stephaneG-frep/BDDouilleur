@@ -13,6 +13,9 @@ import '../database/database_screen.dart';
 import '../../data/codegen/flutter_codegen.dart';
 import '../../domain/schema_proposal.dart';
 import '../agent/agent_screen.dart';
+import '../autopilot/autopilot_screen.dart';
+import '../repair/repair_screen.dart';
+import '../security/security_screen.dart';
 import '../codegen/codegen_screen.dart';
 import '../detective/project_analysis_screen.dart';
 import '../fabrique/fabrique_screen.dart';
@@ -84,13 +87,14 @@ Future<void> openModule(BuildContext context, ModuleInfo module) async {
     case ModuleId.reparateur:
       final c = await pickConnection(context, purpose: 'diagnostiquer', sqliteOnly: true);
       if (c != null && context.mounted) {
-        await Navigator.push(
-            context, MaterialPageRoute(builder: (_) => DatabaseScreen(connection: c, initialTab: DatabaseTab.health)));
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => RepairScreen(connection: c)));
       }
     case ModuleId.firebase:
       await Navigator.push(context, MaterialPageRoute(builder: (_) => const FirebaseHubScreen()));
-    case ModuleId.gardien || ModuleId.autopilot:
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => ModuleInfoScreen(module: module)));
+    case ModuleId.gardien:
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => const SecurityScreen()));
+    case ModuleId.autopilot:
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => const AutopilotScreen()));
   }
 }
 
